@@ -20,6 +20,14 @@ _Currently support **MySQL** compatible DB tables ONLY_
   1. **Customized PK field sequence** for chunk query for much better performance.
   1. Generating **sql CRUD code** for data sync. working with tool [mycli](https://github.com/dbcli/mycli), [csvkit](https://github.com/wireservice/csvkit).
 
+## Setup
+
+```bash
+go get -u github.com/go-sql-driver/mysql
+go get -u github.com/sirupsen/logrus
+go get -u github.com/spf13/cobra@latest
+```
+
 ## Build
 
 ```bash
