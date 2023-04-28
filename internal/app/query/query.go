@@ -48,13 +48,14 @@ var envVar = common.GetEnvVar()
 
 // ConsolidateTableRows : A struct to store multiple diff chunk json lines output
 type ConsolidateTableRows struct { // {{{
-	MapTableRows        *map[string][]any
-	TableSrc            string
-	TableTgt            string
-	AllPKColumnNames    []string // could be different from PKColumnNames if customized pk fields sequence used
-	PKColumnNames       []string
-	FieldColumnNames    []string
-	PKColumnValuesQuote []string
+	MapPKColumnValuesRows *map[string][]string // formated PK Column Values, 1 string per row
+	MapPKColumnValues     *map[string][][]any  // actual PK Column Values
+	TableSrc              string
+	TableTgt              string
+	AllPKColumnNames      []string // could be different from PKColumnNames if customized pk fields sequence used
+	PKColumnNames         []string
+	FieldColumnNames      []string
+	PKColumnValuesQuote   []string
 } // }}}
 
 func errorCheck(err error) { // {{{
@@ -141,14 +142,21 @@ func PopulateConsolidateTableRows(
 		errorCheck(e)
 	}()
 
-	mapTableRows := &map[string][]any{
+	mapPKColumnValuesRows := &map[string][]string{
+		"insert": {},
+		"update": {},
+		"delete": {},
+	}
+
+	mapPKColumnValues := &map[string][][]any{
 		"insert": {},
 		"update": {},
 		"delete": {},
 	}
 
 	consolidateTableRows = &ConsolidateTableRows{
-		MapTableRows: mapTableRows,
+		MapPKColumnValuesRows: mapPKColumnValuesRows,
+		MapPKColumnValues:     mapPKColumnValues,
 	}
 
 	// deduplication of table rows, for the case where the boundary row is different, which would result in multiple diff chunk json lines
@@ -184,9 +192,13 @@ func PopulateConsolidateTableRows(
 
 			if !(*mapTableRowExists)[crudtype][pkColumnValuesRow] {
 				(*mapTableRowExists)[crudtype][pkColumnValuesRow] = true
-				(*mapTableRows)[crudtype] = append(
-					(*mapTableRows)[crudtype],
+				(*mapPKColumnValuesRows)[crudtype] = append(
+					(*mapPKColumnValuesRows)[crudtype],
 					pkColumnValuesRow,
+				)
+				(*mapPKColumnValues)[crudtype] = append(
+					(*mapPKColumnValues)[crudtype],
+					tr.PKColumnValues,
 				)
 			}
 		}
@@ -259,7 +271,7 @@ func prepareSQLStatement(
 	var pkColumnValuesRows []string
 	//  format to slice of ROW(value1, value2)
 	//  ┌──────────────────────────────────────────────────────────────────────────────┐
-	for _, value := range (*consolidateTableRows.MapTableRows)[crudtype] {
+	for _, value := range (*consolidateTableRows.MapPKColumnValuesRows)[crudtype] {
 		pkColumnValuesRows = append(pkColumnValuesRows, fmt.Sprintf("ROW(%s)", value))
 	}
 	//  └──────────────────────────────────────────────────────────────────────────────┘
@@ -414,7 +426,7 @@ func GenerateSQL() { // {{{
 			"\n-- ┌[" + crudtype + "]──────────────────────────────────────────────────────────────────────────────┐\n",
 		)
 
-		if len((*consolidateTableRows.MapTableRows)[crudtype]) == 0 {
+		if len((*consolidateTableRows.MapPKColumnValuesRows)[crudtype]) == 0 {
 			fmt.Printf("//  <empty>")
 		} else {
 			preparedSQL := prepareSQLStatement(crudtype, consolidateTableRows)
