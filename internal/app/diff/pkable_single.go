@@ -96,9 +96,9 @@ func (t *pkTableSingle) TransformUpperBoundaryResult(
 	tub *tableUpperBoundary,
 ) (resultset [][]any) { // {{{
 	chunksize := envArg.ArgChunksize
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 
-	lastPKfieldtype := t.GetPkColumns()[len(t.GetPkColumns())-1].FieldType
+	lastPKfieldtype := t.GetPKColumns()[len(t.GetPKColumns())-1].FieldType
 	var pkColumnOperators []string
 
 	// lambda function code for reuse, transform column type *any-> any, return
@@ -183,7 +183,7 @@ func (t *pkTableSingle) ResetLowerboundaryUpperboundary(
 		return
 	}
 
-	lastPKfieldtype := t.GetPkColumns()[len(t.GetPkColumns())-1].FieldType
+	lastPKfieldtype := t.GetPKColumns()[len(t.GetPKColumns())-1].FieldType
 	userUpperboundary := lastPKfieldtype.transformFieldType(
 		envArg.ArgUpperBoundary[len(envArg.ArgUpperBoundary)-1],
 	)

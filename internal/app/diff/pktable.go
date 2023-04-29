@@ -34,8 +34,8 @@ import (
 
 type ipkTable interface { // {{{
 	RunTableRoutine(*sql.DB, *sql.DB, ipkTable)
-	GetPkColumns() []pkColumn
-	GetPkColumnNames() []string
+	GetPKColumns() []pkColumn
+	GetPKColumnNames() []string
 	PKColumnMaxGroupCount(*sql.DB) int
 	UpperBoundaryQuery([]string, []string, int) string
 	ResetLowerboundaryUpperboundary([]any, []any) (bool, any)
@@ -66,22 +66,24 @@ type tableUpperBoundary struct { // {{{
 } // }}}
 
 type pkTable struct {
-	_pkColumns     []pkColumn
-	_pkColumnNames []string
+	_allpkColumns     []pkColumn
+	_allpkColumnNames []string
+	_pkColumns        []pkColumn
+	_pkColumnNames    []string
 }
 
-func (t *pkTable) init(pkColumns []pkColumn) { // {{{
+func (t *pkTable) init(allpkcolumns []pkColumn) { // {{{
 	var columnsequence []int
 
-	if len(envArg.ArgPkColumnSequence) == 1 && envArg.ArgPkColumnSequence[0] == "" {
-		columnsequence = make([]int, len(pkColumns))
-		t._pkColumns = make([]pkColumn, len(pkColumns))
-		t._pkColumnNames = make([]string, len(pkColumns))
-		for i := 0; i < len(pkColumns); i++ {
+	if len(envArg.ArgPKColumnSequence) == 1 && envArg.ArgPKColumnSequence[0] == "" {
+		columnsequence = make([]int, len(allpkcolumns))
+		t._pkColumns = make([]pkColumn, len(allpkcolumns))
+		t._pkColumnNames = make([]string, len(allpkcolumns))
+		for i := 0; i < len(allpkcolumns); i++ {
 			columnsequence[i] = i
 		}
 	} else {
-		newcolumns := envArg.ArgPkColumnSequence
+		newcolumns := envArg.ArgPKColumnSequence
 		columnsequence = make([]int, len(newcolumns))
 		t._pkColumns = make([]pkColumn, len(newcolumns))
 		t._pkColumnNames = make([]string, len(newcolumns))
@@ -92,16 +94,31 @@ func (t *pkTable) init(pkColumns []pkColumn) { // {{{
 	}
 
 	for i, v := range columnsequence {
-		t._pkColumns[i] = pkColumns[v]
-		t._pkColumnNames[i] = pkColumns[v].ColumnName
+		t._pkColumns[i] = allpkcolumns[v]
+		t._pkColumnNames[i] = allpkcolumns[v].ColumnName
+	}
+
+	t._allpkColumns = make([]pkColumn, len(allpkcolumns))
+	t._allpkColumnNames = make([]string, len(allpkcolumns))
+	for i := 0; i < len(allpkcolumns); i++ {
+		t._allpkColumns[i] = allpkcolumns[i]
+		t._allpkColumnNames[i] = allpkcolumns[i].ColumnName
 	}
 } // }}}
 
-func (t *pkTable) GetPkColumns() []pkColumn { // {{{
+func (t *pkTable) GetAllPKColumns() []pkColumn { // {{{
+	return t._allpkColumns
+} // }}}
+
+func (t *pkTable) GetAllPKColumnNames() []string { // {{{
+	return t._allpkColumnNames
+} // }}}
+
+func (t *pkTable) GetPKColumns() []pkColumn { // {{{
 	return t._pkColumns
 } // }}}
 
-func (t *pkTable) GetPkColumnNames() []string { // {{{
+func (t *pkTable) GetPKColumnNames() []string { // {{{
 	return t._pkColumnNames
 } // }}}
 
@@ -155,7 +172,7 @@ func (t *pkTable) TableQueryColumnNames(
 	//  ┌                                                                              ┐
 	//  │   figure out pkColumnsWhere                                                  │
 	//  └                                                                              ┘
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 
 	for i := 0; i < len(pkColumnNames); i++ {
 		if i == (len(pkColumnNames) - 1) { // last field
@@ -199,11 +216,11 @@ func (t *pkTable) TableHashStmt(
 	//  ┌──────────────────────────────────────────────────────────────────────────────┐
 	for i := 0; i < len(inputs); i++ {
 		var quote string
-		if i == len(t.GetPkColumns()) {
-			if t.GetPkColumns()[len(t.GetPkColumns())-1].FieldType.withQuote() {
+		if i == len(t.GetPKColumns()) {
+			if t.GetPKColumns()[len(t.GetPKColumns())-1].FieldType.withQuote() {
 				quote = "'"
 			}
-		} else if t.GetPkColumns()[i].FieldType.withQuote() {
+		} else if t.GetPKColumns()[i].FieldType.withQuote() {
 			quote = "'"
 		}
 
@@ -233,7 +250,7 @@ func (t *pkTable) TableHashStmt(
 func (t *pkTable) PKColumnMaxGroupCount(
 	dbSrc *sql.DB,
 ) int { // {{{
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 	table := envArg.ArgSrcTable
 
 	query := fmt.Sprintf(`
@@ -296,7 +313,7 @@ func (t *pkTable) UpperBoundaryResult(
 	//  ┌──────────────────────────────────────────────────────────────────────────────┐
 	for i := 0; i < len(tub.LowerBoundary); i++ {
 		var quote string
-		if t.GetPkColumns()[i].FieldType.withQuote() {
+		if t.GetPKColumns()[i].FieldType.withQuote() {
 			quote = "'"
 		}
 
@@ -342,7 +359,7 @@ func (t *pkTable) InitialPKFieldLowerboundaryFromTable(
 	dbSrc *sql.DB,
 ) (resultset [][]any) { // {{{
 
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 	table := envArg.ArgSrcTable
 
 	query := `
@@ -384,13 +401,13 @@ func (t *pkTable) FindInitialPKFieldLowerboundary(
 	dbSrc *sql.DB,
 ) (lowerboundary []any) { // {{{
 
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 	lowerboundary = make([]any, len(pkColumnNames))
 
 	if envArg.ArgLowerBoundary[0] != "" {
 		for i := 0; i < len(pkColumnNames); i++ {
 			if envArg.ArgLowerBoundary[i] != "" {
-				ft := t.GetPkColumns()[i].FieldType
+				ft := t.GetPKColumns()[i].FieldType
 				lowerboundary[i] = ft.transformFieldType(envArg.ArgLowerBoundary[i])
 			}
 		}
@@ -413,7 +430,7 @@ func (t *pkTable) FindInitialPKFieldLowerboundary(
 	originalrow := rub[0]
 	for i := 0; i < len(originalrow); i++ {
 		v := *originalrow[i].(*any)
-		ft := t.GetPkColumns()[i].FieldType
+		ft := t.GetPKColumns()[i].FieldType
 		lowerboundary[i] = ft.transformDBResultType(v)
 	}
 
@@ -437,7 +454,7 @@ func (t *pkTable) RunTableChunk(
 ) (stoprun bool) { // {{{
 	log.Debugf("====resultset: %v====\n", resultset)
 
-	lastPKfieldtype := pkTab.GetPkColumns()[len(pkTab.GetPkColumns())-1].FieldType
+	lastPKfieldtype := pkTab.GetPKColumns()[len(pkTab.GetPKColumns())-1].FieldType
 	hashQuerySrc := t.TableHashQueryChunkLevel(dbSrc, envArg.ArgSrcTable)
 	hashQueryTgt := t.TableHashQueryChunkLevel(dbTgt, envArg.ArgTgtTable)
 	rowcntSrc := 0
@@ -537,22 +554,12 @@ func (t *pkTable) RunTableRoutine(
 	stoprun := false
 	lowerboundary := t.FindInitialPKFieldLowerboundary(dbSrc)
 
-	var pkColumnValuesQuote []string
-	for _, pkcolumn := range pkTab.GetPkColumns() {
-		if pkcolumn.FieldType.withQuote() {
-			pkColumnValuesQuote = append(pkColumnValuesQuote, "'")
-		} else {
-			pkColumnValuesQuote = append(pkColumnValuesQuote, "")
-		}
-	}
-
 	for chunkidx := 0; !stoprun; {
 		var tci tableChunkInfo
 		tci.TableSrc = envArg.ArgSrcTable
 		tci.TableTgt = envArg.ArgTgtTable
-		tci.PKColumnNames = t.GetPkColumnNames()
-		tci.PKColumnValuesQuote = pkColumnValuesQuote
-		tci.PkColumnSequence = envArg.ArgPkColumnSequence
+		tci.PKColumnNames = t.GetPKColumnNames()
+		tci.PKColumnSequence = envArg.ArgPKColumnSequence
 		tci.IgnoreFields = envArg.ArgIgnoreFields
 		tci.AdditionalFilter = envArg.ArgAdditionalFilter
 

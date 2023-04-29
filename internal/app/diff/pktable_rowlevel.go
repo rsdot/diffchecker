@@ -31,8 +31,8 @@ import (
 
 // TableRow : json marshalable struct on table row level
 type TableRow struct { // {{{
-	Hash           int   `json:"rowhash"`
-	PKColumnValues []any `json:"pkcolumnvalues"`
+	Hash              int   `json:"rowhash"`
+	AllPKColumnValues []any `json:"allpkcolumnvalues"`
 } // }}}
 
 // tableRowCrud : json marshalable struct on table row level for crud types
@@ -48,8 +48,8 @@ type TableChunkRowsInfo struct { // {{{
 	Diff            tableRowCrud   `json:"diff"`
 	TableRowsSrc    []TableRow     `json:"-"` // raw source table rows
 	TableRowsTgt    []TableRow     `json:"-"` // raw target table rows
-	TableRowsMapSrc map[string]int `json:"-"` // map of source table pk column values to row hash
-	TableRowsMapTgt map[string]int `json:"-"` // map of target table pk column values to row hash
+	MapTableRowsSrc map[string]int `json:"-"` // map of source table pk column values to row hash
+	MapTableRowsTgt map[string]int `json:"-"` // map of target table pk column values to row hash
 } // }}}
 
 /*
@@ -67,7 +67,7 @@ func (t *pkTable) TableHashQueryRowLevel(
 
 	columnNames, pkColumnsWhere := t.TableQueryColumnNames(db, table)
 
-	pkColumnNames := t.GetPkColumnNames()
+	allPKColumnNames := t.GetAllPKColumnNames()
 	var additionalfilterstmt string
 	if envArg.ArgAdditionalFilter != "" {
 		additionalfilterstmt = " AND " + envArg.ArgAdditionalFilter
@@ -78,10 +78,10 @@ func (t *pkTable) TableHashQueryRowLevel(
       CAST(CRC32(
         CONCAT_WS('#',` + strings.Join(columnNames, ",") + `)
         ) AS UNSIGNED) AS crc32,` +
-		strings.Join(pkColumnNames, ",") + `
+		strings.Join(allPKColumnNames, ",") + `
     FROM ` + table + `
     WHERE ` + strings.Join(pkColumnsWhere, " AND ") + additionalfilterstmt + `
-    ORDER BY ` + strings.Join(pkColumnNames, ",")
+    ORDER BY ` + strings.Join(allPKColumnNames, ",")
 
 	log.Traceln(query)
 
@@ -122,7 +122,7 @@ func (t *pkTable) TableResultRowLevel(
 
 	// loop through the result set and store the result in struct
 	for rowresult.Next() {
-		vals := make([]any, len(t.GetPkColumns())+1)
+		vals := make([]any, len(t.GetAllPKColumns())+1)
 
 		// 1st field: hash
 		vals[0] = new(int)
@@ -135,28 +135,28 @@ func (t *pkTable) TableResultRowLevel(
 		e = rowresult.Scan(vals...)
 		errorCheck(e)
 
-		PKColumnValues := make([]any, len(t.GetPkColumns()))
+		allPKColumnValues := make([]any, len(t.GetAllPKColumns()))
 
 		for i := 1; i < len(vals); i++ {
 			v := *vals[i].(*any)
-			tv := t.GetPkColumns()[i-1].FieldType.transformDBResultType(v)
-			PKColumnValues[i-1] = tv
+			tv := t.GetAllPKColumns()[i-1].FieldType.transformDBResultType(v)
+			allPKColumnValues[i-1] = tv
 		}
 
 		tr := TableRow{
-			Hash:           *vals[0].(*int),
-			PKColumnValues: PKColumnValues,
+			Hash:              *vals[0].(*int),
+			AllPKColumnValues: allPKColumnValues,
 		}
 
-		pkcolumnvaluesbytes, _ := json.Marshal(tr.PKColumnValues)
-		pkcolumnvalues := string(pkcolumnvaluesbytes)
+		allPKColumnValuesBytes, _ := json.Marshal(tr.AllPKColumnValues)
+		stringAllPKColumnValues := string(allPKColumnValuesBytes)
 
 		if issrc {
 			tcri.TableRowsSrc = append(tcri.TableRowsSrc, tr)
-			tcri.TableRowsMapSrc[pkcolumnvalues] = tr.Hash
+			tcri.MapTableRowsSrc[stringAllPKColumnValues] = tr.Hash
 		} else {
 			tcri.TableRowsTgt = append(tcri.TableRowsTgt, tr)
-			tcri.TableRowsMapTgt[pkcolumnvalues] = tr.Hash
+			tcri.MapTableRowsTgt[stringAllPKColumnValues] = tr.Hash
 		}
 	}
 
@@ -201,19 +201,19 @@ func (t *pkTable) TableRoutineRowLevel(
 	// figure out crud on row level
 	//  ┌──────────────────────────────────────────────────────────────────────────────┐
 	for _, tr := range tcri.TableRowsSrc {
-		pkcolumnvaluesbytes, _ := json.Marshal(tr.PKColumnValues)
-		pkcolumnvalues := string(pkcolumnvaluesbytes)
+		allPKColumnValuesBytes, _ := json.Marshal(tr.AllPKColumnValues)
+		stringAllPKColumnValues := string(allPKColumnValuesBytes)
 
-		if _, exists := tcri.TableRowsMapTgt[pkcolumnvalues]; !exists {
+		if _, exists := tcri.MapTableRowsTgt[stringAllPKColumnValues]; !exists {
 			tcri.Diff.Insert = append(tcri.Diff.Insert, tr)
-		} else if tcri.TableRowsMapSrc[pkcolumnvalues] != tcri.TableRowsMapTgt[pkcolumnvalues] {
+		} else if tcri.MapTableRowsSrc[stringAllPKColumnValues] != tcri.MapTableRowsTgt[stringAllPKColumnValues] {
 			tcri.Diff.Update = append(tcri.Diff.Update, tr)
 		}
 	}
 
 	for _, tr := range tcri.TableRowsTgt {
-		pkcolumnvaluesbytes, _ := json.Marshal(tr.PKColumnValues)
-		if _, exists := tcri.TableRowsMapSrc[string(pkcolumnvaluesbytes)]; !exists {
+		allPKColumnValuesBytes, _ := json.Marshal(tr.AllPKColumnValues)
+		if _, exists := tcri.MapTableRowsSrc[string(allPKColumnValuesBytes)]; !exists {
 			tcri.Diff.Delete = append(tcri.Diff.Delete, tr)
 		}
 	}
@@ -230,8 +230,7 @@ func (t *pkTable) RunTableRoutineRowLevel(
 	tcri.ChunkIdx = tci.ChunkIdx
 	tcri.TableSrc = envArg.ArgSrcTable
 	tcri.TableTgt = envArg.ArgTgtTable
-	tcri.PKColumnNames = t.GetPkColumnNames()
-	tcri.PKColumnValuesQuote = tci.PKColumnValuesQuote
+	tcri.PKColumnNames = t.GetPKColumnNames()
 	tcri.RowcntSrc = tci.RowcntSrc
 	tcri.RowcntTgt = tci.RowcntTgt
 	tcri.HashSrc = tci.HashSrc
@@ -239,14 +238,14 @@ func (t *pkTable) RunTableRoutineRowLevel(
 	tcri.LastPKFieldUpperBoundary = tci.LastPKFieldUpperBoundary
 	tcri.LowerBoundary = tci.LowerBoundary
 	tcri.UpperBoundaryQuery = tci.UpperBoundaryQuery
-	tcri.PkColumnSequence = tci.PkColumnSequence
+	tcri.PKColumnSequence = tci.PKColumnSequence
 	tcri.IgnoreFields = tci.IgnoreFields
 	tcri.AdditionalFilter = tci.AdditionalFilter
 	tcri.HashQuerySrc = t.TableHashQueryRowLevel(dbSrc, envArg.ArgSrcTable)
 	tcri.HashQueryTgt = t.TableHashQueryRowLevel(dbTgt, envArg.ArgTgtTable)
 
-	tcri.TableRowsMapSrc = make(map[string]int, tcri.RowcntSrc)
-	tcri.TableRowsMapTgt = make(map[string]int, tcri.RowcntTgt)
+	tcri.MapTableRowsSrc = make(map[string]int, tcri.RowcntSrc)
+	tcri.MapTableRowsTgt = make(map[string]int, tcri.RowcntTgt)
 
 	t.TableRoutineRowLevel(dbSrc, dbTgt, tcri)
 

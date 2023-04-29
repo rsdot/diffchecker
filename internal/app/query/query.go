@@ -52,10 +52,9 @@ type ConsolidateTableRows struct { // {{{
 	MapPKColumnValues     *map[string][][]any  // actual PK Column Values
 	TableSrc              string
 	TableTgt              string
-	AllPKColumnNames      []string // could be different from PKColumnNames if customized pk fields sequence used
-	PKColumnNames         []string
+	AllPKColumnNames      []string
+	AllPKColumnQuotes     []string
 	FieldColumnNames      []string
-	PKColumnValuesQuote   []string
 } // }}}
 
 func errorCheck(err error) { // {{{
@@ -142,12 +141,14 @@ func PopulateConsolidateTableRows(
 		errorCheck(e)
 	}()
 
+	// stores PK column value rows string 'value1',value2,'value3'...
 	mapPKColumnValuesRows := &map[string][]string{
 		"insert": {},
 		"update": {},
 		"delete": {},
 	}
 
+	// stores PK column value rows original data
 	mapPKColumnValues := &map[string][][]any{
 		"insert": {},
 		"update": {},
@@ -170,18 +171,18 @@ func PopulateConsolidateTableRows(
 		for _, tr := range tablerows {
 			var fields []string
 
-			for i := 0; i < len(tr.PKColumnValues); i++ {
+			for i := 0; i < len(tr.AllPKColumnValues); i++ {
 				fields = append(
 					fields,
 					fmt.Sprintf(
 						"%s%v%s",
-						consolidateTableRows.PKColumnValuesQuote[i],
-						tr.PKColumnValues[i],
-						consolidateTableRows.PKColumnValuesQuote[i],
+						consolidateTableRows.AllPKColumnQuotes[i],
+						tr.AllPKColumnValues[i],
+						consolidateTableRows.AllPKColumnQuotes[i],
 					),
 				)
 			}
-			pkColumnValuesRow := strings.Join(fields, ",")
+			stringPKColumnValuesRow := strings.Join(fields, ",")
 
 			// fmt.Printf(
 			// 	"crudtype: %v, tablerow.PKColumnValues: %v, pkColumnValuesRow: %v\n",
@@ -190,15 +191,15 @@ func PopulateConsolidateTableRows(
 			// 	(*mapTableRowExists)[crudtype][pkColumnValuesRow],
 			// )
 
-			if !(*mapTableRowExists)[crudtype][pkColumnValuesRow] {
-				(*mapTableRowExists)[crudtype][pkColumnValuesRow] = true
+			if !(*mapTableRowExists)[crudtype][stringPKColumnValuesRow] {
+				(*mapTableRowExists)[crudtype][stringPKColumnValuesRow] = true
 				(*mapPKColumnValuesRows)[crudtype] = append(
 					(*mapPKColumnValuesRows)[crudtype],
-					pkColumnValuesRow,
+					stringPKColumnValuesRow,
 				)
 				(*mapPKColumnValues)[crudtype] = append(
 					(*mapPKColumnValues)[crudtype],
-					tr.PKColumnValues,
+					tr.AllPKColumnValues,
 				)
 			}
 		}
@@ -229,12 +230,11 @@ func PopulateConsolidateTableRows(
 			consolidateTableRows.AllPKColumnNames = diff.FindAllPKColumnNames(dbSrc, tcri.TableSrc)
 		}
 
-		if consolidateTableRows.PKColumnNames == nil {
-			consolidateTableRows.PKColumnNames = tcri.PKColumnNames
-		}
-
-		if consolidateTableRows.PKColumnValuesQuote == nil {
-			consolidateTableRows.PKColumnValuesQuote = tcri.PKColumnValuesQuote
+		if consolidateTableRows.AllPKColumnQuotes == nil {
+			consolidateTableRows.AllPKColumnQuotes = diff.FindAllPKColumnQuotes(
+				dbSrc,
+				tcri.TableSrc,
+			)
 		}
 
 		populate("insert", tcri.Diff.Insert)
@@ -258,14 +258,11 @@ func prepareSQLStatement(
 	tableSrc := consolidateTableRows.TableSrc
 	tableTgt := consolidateTableRows.TableTgt
 	fieldnames := consolidateTableRows.FieldColumnNames
+	stringAllPKColumnNames := strings.Join(consolidateTableRows.AllPKColumnNames, ",")
 
-	stringAllPkColumnNames := strings.Join(consolidateTableRows.AllPKColumnNames, ",")
-	// could be different from stringAllPkColumnNames if customized pk fields sequence used
-	stringPkColumnNames := strings.Join(consolidateTableRows.PKColumnNames, ", ")
-
-	mapPkColumnValues := map[string]bool{}
+	mapAllPKColumnValues := map[string]bool{}
 	for _, pkColumnName := range consolidateTableRows.AllPKColumnNames {
-		mapPkColumnValues[pkColumnName] = true
+		mapAllPKColumnValues[pkColumnName] = true
 	}
 
 	var pkColumnValuesRows []string
@@ -306,7 +303,7 @@ func prepareSQLStatement(
 		(*mapDiffTable)[crudtype],
 		tableSrc,
 		(*mapDiffTable)[crudtype],
-		stringAllPkColumnNames,
+		stringAllPKColumnNames,
 	)
 
 	query = query + fmt.Sprintf(`
@@ -330,9 +327,9 @@ func prepareSQLStatement(
 		strings.Join(
 			pkColumnValuesRows,
 			",\n      ",
-		), // format to ROW(value1, value2), ROW(value3, value4)
-		stringPkColumnNames,
-		stringPkColumnNames,
+		), // format to ROW('value1',value2,'value3'...), ...
+		stringAllPKColumnNames,
+		stringAllPKColumnNames,
 	)
 	//  └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -364,7 +361,7 @@ func prepareSQLStatement(
 		updatefieldnames := []string{}
 		for _, fieldname := range fieldnames {
 			var v string
-			if mapPkColumnValues[fieldname] {
+			if mapAllPKColumnValues[fieldname] {
 				v = fmt.Sprintf("  -- /*PK*/ t.%s = s.%s", fieldname, fieldname)
 			} else {
 				v = fmt.Sprintf("  t.%s = s.%s", fieldname, fieldname)
@@ -382,7 +379,7 @@ func prepareSQLStatement(
     %s;`,
 			tableTgt,
 			(*mapDiffTable)[crudtype],
-			stringAllPkColumnNames,
+			stringAllPKColumnNames,
 			strings.Join(updatefieldnames, ",\n    "),
 		)
 
@@ -407,8 +404,8 @@ func prepareSQLStatement(
 				pkColumnValuesRows,
 				",\n        ",
 			), // format to ROW(value1, value2), ROW(value3, value4)
-			stringPkColumnNames,
-			stringPkColumnNames,
+			stringAllPKColumnNames,
+			stringAllPKColumnNames,
 		)
 	}
 	//  └──────────────────────────────────────────────────────────────────────────────┘

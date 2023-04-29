@@ -44,7 +44,7 @@ var diffCmd = &cobra.Command{
 		argSrcTable, _ := cmd.Flags().GetString("source-table")
 		argTgtTable, _ := cmd.Flags().GetString("target-table")
 		argChunksize, _ := cmd.Flags().GetInt("chunk-size")
-		argPkColumnSequence, _ := cmd.Flags().GetString("pkcolumn-sequence")
+		argPKColumnSequence, _ := cmd.Flags().GetString("pkcolumn-sequence")
 		argIgnoreFields, _ := cmd.Flags().GetString("ignore-fields")
 		argAdditionalFilter, _ := cmd.Flags().GetString("additional-filter")
 		argOutputfile, _ := cmd.Flags().GetString("output")
@@ -58,7 +58,7 @@ var diffCmd = &cobra.Command{
 		// fmt.Printf("argSrcTable: %v\n", argSrcTable)
 		// fmt.Printf("argTgtTable: %v\n", argTgtTable)
 		// fmt.Printf("argChunksize: %v\n", argChunksize)
-		// fmt.Printf("argPkColumnSequence: %v\n", argPkColumnSequence)
+		// fmt.Printf("argPKColumnSequence: %v\n", argPKColumnSequence)
 		// fmt.Printf("argIgnoreFields: %v\n", argIgnoreFields)
 		// fmt.Printf("argAdditionalFilter: %v\n", argAdditionalFilter)
 		// fmt.Printf("argOutputfile: %v\n", argOutputfile)
@@ -75,7 +75,7 @@ var diffCmd = &cobra.Command{
 			argSrcTable,
 			argTgtTable,
 			argChunksize,
-			argPkColumnSequence,
+			argPKColumnSequence,
 			argIgnoreFields,
 			argAdditionalFilter,
 		)

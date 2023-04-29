@@ -40,7 +40,7 @@ type envarg struct { // {{{
 	ArgSrcTable           string
 	ArgTgtTable           string
 	ArgChunksize          int
-	ArgPkColumnSequence   []string
+	ArgPKColumnSequence   []string
 	ArgIgnoreFields       []string
 	ArgAdditionalFilter   string
 	ArgOutputfile         *os.File
@@ -124,8 +124,8 @@ func GetTableColumns(db *sql.DB, table string) (fieldcolumns []string) { // {{{
 	return
 } // }}}
 
-// findPKColumns populate pkcolumn struct
-func findPKColumns(db *sql.DB, table string) (pkColumns []pkColumn) { // {{{
+// allPKColumns populate pkcolumn struct
+func allPKColumns(db *sql.DB, table string) (allpkcolumns []pkColumn) { // {{{
 	query := `
     SELECT SQL_NO_CACHE
       col.column_name,
@@ -178,8 +178,8 @@ func findPKColumns(db *sql.DB, table string) (pkColumns []pkColumn) { // {{{
 			log.Fatalf("Unsupported data type: %s\n", datatype)
 		}
 
-		pkColumns = append(
-			pkColumns,
+		allpkcolumns = append(
+			allpkcolumns,
 			pkColumn{
 				ColumnName:  columnname,
 				DataType:    datatype,
@@ -189,24 +189,41 @@ func findPKColumns(db *sql.DB, table string) (pkColumns []pkColumn) { // {{{
 		)
 	}
 	// flag last field
-	pkColumns[len(pkColumns)-1].IsLastField = true
+	allpkcolumns[len(allpkcolumns)-1].IsLastField = true
 
-	log.Debugln(pkColumns)
+	log.Debugln(allpkcolumns)
 
 	return
 } // }}}
 
-// FindAllPKColumnNames find table's primary key column names
+// FindAllPKColumnNames find table's all PK column names
 func FindAllPKColumnNames(db *sql.DB, table string) []string { // {{{
-	pkColumns := findPKColumns(db, table)
+	allpkcolumns := allPKColumns(db, table)
 
-	pkColumnNames := make([]string, len(pkColumns))
+	pkColumnNames := make([]string, len(allpkcolumns))
 
-	for i := 0; i < len(pkColumns); i++ {
-		pkColumnNames[i] = pkColumns[i].ColumnName
+	for i, pkcolumn := range allpkcolumns {
+		pkColumnNames[i] = pkcolumn.ColumnName
 	}
 
 	return pkColumnNames
+} // }}}
+
+// FindAllPKColumnQuotes find table's all PK column quotes
+func FindAllPKColumnQuotes(db *sql.DB, table string) []string { // {{{
+	allpkcolumns := allPKColumns(db, table)
+
+	pkColumnValuesQuotes := make([]string, len(allpkcolumns))
+
+	for i, pkcolumn := range allpkcolumns {
+		if pkcolumn.FieldType.withQuote() {
+			pkColumnValuesQuotes[i] = "'"
+		} else {
+			pkColumnValuesQuotes[i] = ""
+		}
+	}
+
+	return pkColumnValuesQuotes
 } // }}}
 
 // SetArgs : assign CLI arguments
@@ -219,7 +236,7 @@ func SetArgs(
 	argSrcTable string,
 	argTgtTable string,
 	argChunksize int,
-	argPkColumnSequence string,
+	argPKColumnSequence string,
 	argIgnoreFields string,
 	argAdditionalFilter string,
 ) { // {{{
@@ -233,7 +250,7 @@ func SetArgs(
 	} else {
 		envArg.ArgChunksize = argChunksize
 	}
-	envArg.ArgPkColumnSequence = strings.Split(argPkColumnSequence, ",")
+	envArg.ArgPKColumnSequence = strings.Split(argPKColumnSequence, ",")
 	envArg.ArgIgnoreFields = strings.Split(argIgnoreFields, ",")
 	envArg.ArgAdditionalFilter = argAdditionalFilter
 
@@ -242,13 +259,13 @@ func SetArgs(
 		log.Fatalln("-l and -u should have same number of elements")
 	}
 
-	if argPkColumnSequence != "" {
+	if argPKColumnSequence != "" {
 		if argLowerboundary != "" &&
-			len(envArg.ArgLowerBoundary) != len(envArg.ArgPkColumnSequence) {
+			len(envArg.ArgLowerBoundary) != len(envArg.ArgPKColumnSequence) {
 			log.Fatalln("-l and -S should have same number of elements")
 		}
 		if argUpperboundary != "" &&
-			len(envArg.ArgUpperBoundary) != len(envArg.ArgPkColumnSequence) {
+			len(envArg.ArgUpperBoundary) != len(envArg.ArgPKColumnSequence) {
 			log.Fatalln("-u and -S should have same number of elements")
 		}
 	}
@@ -287,7 +304,7 @@ func setLogSettings() { // {{{
 	log.WithFields(log.Fields{
 		"F": envArg.ArgAdditionalFilter,
 		"I": strings.Join(envArg.ArgIgnoreFields, ","),
-		"S": strings.Join(envArg.ArgPkColumnSequence, ","),
+		"S": strings.Join(envArg.ArgPKColumnSequence, ","),
 		"c": envArg.ArgChunksize,
 		"l": strings.Join(envArg.ArgLowerBoundary, ","),
 		"o": envArg.ArgOutputfile.Name() + ", " + envArg.ArgOutputRowLevelfile.Name(),
@@ -376,26 +393,26 @@ func RunTable(outputfile string) { // {{{
 		errorCheck(e)
 	}()
 
-	pkColumns := findPKColumns(dbSrc, envArg.ArgSrcTable)
+	allpkcolumns := allPKColumns(dbSrc, envArg.ArgSrcTable)
 
 	var t ipkTable
-	switch len(pkColumns) {
+	switch len(allpkcolumns) {
 	case 1:
-		t = new(pkTableSingle).Init(pkColumns)
+		t = new(pkTableSingle).Init(allpkcolumns)
 	default:
-		t = new(pkTableMulti).Init(pkColumns)
+		t = new(pkTableMulti).Init(allpkcolumns)
 	}
 
 	// abort if:
-	// 1. argPkColumnSequence is less than actual pk columns
-	// 2. chunksize < top 1 count of group by argPkColumnSequence columns
-	if len(t.GetPkColumnNames()) < len(pkColumns) {
+	// 1. argPKColumnSequence is less than actual pk columns
+	// 2. chunksize < top 1 count of group by argPKColumnSequence columns
+	if len(t.GetPKColumnNames()) < len(allpkcolumns) {
 		maxgroupcount := t.PKColumnMaxGroupCount(dbSrc)
 		if envArg.ArgChunksize <= maxgroupcount {
 			log.Fatalf(
 				"chunksize should be greater than max count(%d) of group by (%s) columns\n",
 				maxgroupcount,
-				strings.Join(t.GetPkColumnNames(), ", "),
+				strings.Join(t.GetPKColumnNames(), ", "),
 			)
 		}
 	}

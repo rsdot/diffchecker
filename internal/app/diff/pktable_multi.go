@@ -129,9 +129,9 @@ func (t *pkTableMulti) TransformUpperBoundaryResult(
 	tub *tableUpperBoundary,
 ) (resultset [][]any) { // {{{
 	chunksize := envArg.ArgChunksize
-	pkColumnNames := t.GetPkColumnNames()
+	pkColumnNames := t.GetPKColumnNames()
 
-	lastPKfieldtype := t.GetPkColumns()[len(t.GetPkColumns())-1].FieldType
+	lastPKfieldtype := t.GetPKColumns()[len(t.GetPKColumns())-1].FieldType
 	var pkColumnOperators []string
 
 	// lambda function code for reuse, return
@@ -154,7 +154,7 @@ func (t *pkTableMulti) TransformUpperBoundaryResult(
 			// 2. PK fields (not include last field)
 			for c := 1; c < len(originalrow)-1; c++ {
 				v := *originalrow[c].(*any)
-				ft := t.GetPkColumns()[c-1].FieldType
+				ft := t.GetPKColumns()[c-1].FieldType
 				rowinresultset = append(rowinresultset, ft.transformDBResultType(v))
 			}
 
@@ -311,7 +311,7 @@ func (t *pkTableMulti) ResetLowerboundaryUpperboundary(
 	// single PK skip the loop
 	matchedfieldcnt := 0
 	for c := 1; c < len(row)-2; c++ { // column level
-		ft := t.GetPkColumns()[c-1].FieldType
+		ft := t.GetPKColumns()[c-1].FieldType
 		userUB := envArg.ArgUpperBoundary[c-1]
 		if ft.equals(row[c], userUB) {
 			matchedfieldcnt++
@@ -331,7 +331,7 @@ func (t *pkTableMulti) ResetLowerboundaryUpperboundary(
 		}
 	}
 
-	lastPKfieldtype := t.GetPkColumns()[len(t.GetPkColumns())-1].FieldType
+	lastPKfieldtype := t.GetPKColumns()[len(t.GetPKColumns())-1].FieldType
 	userUpperboundary := lastPKfieldtype.transformFieldType(
 		envArg.ArgUpperBoundary[len(envArg.ArgUpperBoundary)-1],
 	)

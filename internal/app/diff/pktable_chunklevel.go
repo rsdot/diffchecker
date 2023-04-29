@@ -39,18 +39,17 @@ type tableChunkInfo struct { // {{{
 	TableSrc                 string    `json:"tablesrc"`
 	TableTgt                 string    `json:"tabletgt"`
 	PKColumnNames            []string  `json:"pkcolumnnames"`
-	PKColumnValuesQuote      []string  `json:"pkcolumnvaluesquote"`
+	PKColumnSequence         []string  `json:"pkcolumnsequence"`
 	RowcntSrc                int       `json:"rowcntsrc"`
 	RowcntTgt                int       `json:"rowcnttgt"`
 	HashSrc                  int       `json:"hashsrc"`
 	HashTgt                  int       `json:"hashtgt"`
+	IgnoreFields             []string  `json:"ignorefields"`
+	AdditionalFilter         string    `json:"additionalfilter"`
 	LastPKFieldUpperBoundary any       `json:"lastpkfieldupperboundary"`
 	tableUpperBoundary
-	PkColumnSequence []string `json:"pkcolumnsequence"`
-	IgnoreFields     []string `json:"ignorefields"`
-	AdditionalFilter string   `json:"additionalfilter"`
-	HashQuerySrc     string   `json:"hashquerysrc"`
-	HashQueryTgt     string   `json:"hashquerytgt"`
+	HashQuerySrc string `json:"hashquerysrc"`
+	HashQueryTgt string `json:"hashquerytgt"`
 } // }}}
 
 /*
