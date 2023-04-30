@@ -23,4 +23,6 @@ go.work
 .DS_Store
 _*
 bin/
+dbmodel/
+sqlboiler.toml
 .env
