@@ -96,7 +96,9 @@ func (t *pkTableMulti) UpperBoundaryQuery(
 		additionalfilterstmt = " AND " + envArg.ArgAdditionalFilter
 	}
 
-	query = `
+	// distinguish customized single PK column sequence in multi PK table case
+	if len(pkcolumnsNolastpkfields) > 0 {
+		query = `
     SELECT SQL_NO_CACHE
 			COUNT(1) AS rowcnt,` + strings.Join(pkcolumnsNolastpkfields, ",") + `,MAX(` + lastpkfield + `)
     FROM (
@@ -108,6 +110,18 @@ func (t *pkTableMulti) UpperBoundaryQuery(
     GROUP BY ` + strings.Join(pkcolumnsNolastpkfields, ",") + `
     ORDER BY ` + strings.Join(pkcolumnsNolastpkfields, ",") + `
     `
+	} else {
+		query = `
+    SELECT SQL_NO_CACHE
+			COUNT(1) AS rowcnt` + `,MAX(` + lastpkfield + `)
+    FROM (
+      SELECT ` + strings.Join(columnNames, ",") + `
+      FROM ` + table + `
+      WHERE ` + strings.Join(pkcolumnsWhere, " AND ") + additionalfilterstmt + `
+      ORDER BY ` + strings.Join(columnNames, ",") + `
+      LIMIT ` + strconv.Itoa(chunksize) + `) AS A
+    `
+	}
 
 	log.Traceln(query)
 
@@ -214,6 +228,10 @@ func (t *pkTableMulti) TransformUpperBoundaryResult(
 		return rowcntSrc
 	} // }}}
 
+	runUpperBoundaryFor1PKFields := func() { // {{{
+		runUpperBoundary(1)
+	} // }}}
+
 	runUpperBoundaryFor2PKFields := func() { // {{{
 		rowcntSrc := runUpperBoundary(2)
 
@@ -227,7 +245,7 @@ func (t *pkTableMulti) TransformUpperBoundaryResult(
 		tub.LowerBoundary = tub.LowerBoundary[:len(tub.LowerBoundary)-1]
 
 		pkColumnOperators = []string{">"}
-		runUpperBoundary(1)
+		runUpperBoundaryFor1PKFields()
 	} // }}}
 
 	runUpperBoundaryFor3PKFields := func() { // {{{
@@ -263,6 +281,9 @@ func (t *pkTableMulti) TransformUpperBoundaryResult(
 	} // }}}
 
 	switch len(pkColumnNames) {
+	case 1:
+		pkColumnOperators = []string{">="}
+		runUpperBoundaryFor1PKFields()
 	case 2:
 		pkColumnOperators = []string{"=", ">="}
 		runUpperBoundaryFor2PKFields()
