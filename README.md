@@ -23,6 +23,7 @@ _Currently support **MySQL** compatible DB tables ONLY_
 ## Setup
 
 ```bash
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 go get -u github.com/go-sql-driver/mysql
 go get -u github.com/sirupsen/logrus
 go get -u github.com/spf13/cobra@latest
