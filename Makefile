@@ -9,11 +9,11 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(path_to_add):$(PATH)
 
-CURDIR   := $(shell pwd)
 GO       := GO111MODULE=on go
 GOTEST   := CGO_ENABLED=1 $(GO) test -p 3
 PACKAGES := $$(go list ./... | grep -vE 'vendor')
-FILES     := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+FILES    := $$(find . -name '*.go' -type f | grep -vE 'vendor')
+BINARY	 := diffchecker
 
 define run_unit_test
 	@echo "running unit test for packages:" $(1)
@@ -27,14 +27,14 @@ version:
 	$(GO) version
 
 diffchecker:
-	$(GO) build -o bin/diffchecker .
+	$(GO) build -o bin/$(BINARY) .
 
 test: version
 	rm -rf /tmp/output
 	$(call run_unit_test,$(PACKAGES))
 
 integration_test: diffchecker
-	@which bin/diffchecker
+	@which bin/$(BINARY)
 	test/run.sh
 
 fmt:

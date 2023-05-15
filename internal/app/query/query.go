@@ -20,14 +20,10 @@ package query
 
 // Importing fmt package for the sake of printing
 import (
-	"bufio"
 	"diffchecker/internal/app/diff"
 	"diffchecker/internal/pkg/common"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"os"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -76,58 +72,12 @@ func SetArgs(
 	envArg.ArgRowlevelFile = argRowlevelFile
 } // }}}
 
-func readFromStdinOrFile(argRowlevelFile string) (textlinebytes [][]byte) { // {{{
-	// detect if stdin is empty
-	// https://stackoverflow.com/a/26567513/10
-	// https://stackoverflow.com/questions/8757389/reading-a-file-line-by-line-in-go
-
-	var reader *bufio.Reader
-
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		// data is being piped to stdin
-		reader = bufio.NewReader(os.Stdin)
-	} else if argRowlevelFile != "" {
-		// data is being read from a file
-		file, e := os.Open(argRowlevelFile)
-		if e != nil {
-			errorCheck(e)
-		}
-		defer func() {
-			e := file.Close()
-			errorCheck(e)
-		}()
-
-		reader = bufio.NewReader(file)
-	} else {
-		// stdin is from a terminal
-		log.Fatal("require either -f <file> or pipe")
-	}
-
-	for {
-		linebytes, e := reader.ReadBytes('\n')
-		if e != nil {
-			if e == io.EOF {
-				break
-			}
-			log.Fatalf("read file line error: %v", e)
-		}
-		textlinebytes = append(textlinebytes, linebytes)
-	}
-
-	if len(textlinebytes) == 0 {
-		log.Fatal("either -f <file> or pipe is empty")
-	}
-
-	return
-} // }}}
-
 // PopulateConsolidateTableRows : populate ConsolidateTableRows struct to store multiple diff chunk json lines output
 func PopulateConsolidateTableRows(
 	argRowlevelFile string,
 ) (consolidateTableRows *ConsolidateTableRows) { // {{{
 
-	textlinebytes := readFromStdinOrFile(argRowlevelFile)
+	inputLineBytes := readFromStdinOrFile(argRowlevelFile)
 
 	dbSrc := diff.InitializeDBSettings(
 		envVar.DfcSrcHost,
@@ -161,7 +111,7 @@ func PopulateConsolidateTableRows(
 	}
 
 	// deduplication of table rows, for the case where the boundary row is different, which would result in multiple diff chunk json lines
-	mapTableRowExists := &map[string](map[string]bool){
+	deduplicatedRows := &map[string](map[string]bool){
 		"insert": {},
 		"update": {},
 		"delete": {},
@@ -188,11 +138,11 @@ func PopulateConsolidateTableRows(
 			// 	"crudtype: %v, tablerow.PKColumnValues: %v, pkColumnValuesRow: %v\n",
 			// 	crudtype,
 			// 	tr.PKColumnValues,
-			// 	(*mapTableRowExists)[crudtype][pkColumnValuesRow],
+			// 	(*deduplicatedRows)[crudtype][pkColumnValuesRow],
 			// )
 
-			if !(*mapTableRowExists)[crudtype][stringPKColumnValuesRow] {
-				(*mapTableRowExists)[crudtype][stringPKColumnValuesRow] = true
+			if !(*deduplicatedRows)[crudtype][stringPKColumnValuesRow] {
+				(*deduplicatedRows)[crudtype][stringPKColumnValuesRow] = true
 				(*mapPKColumnValuesRows)[crudtype] = append(
 					(*mapPKColumnValuesRows)[crudtype],
 					stringPKColumnValuesRow,
@@ -205,7 +155,7 @@ func PopulateConsolidateTableRows(
 		}
 	} // }}}
 
-	for _, input := range textlinebytes {
+	for _, input := range inputLineBytes {
 		var tcri diff.TableChunkRowsInfo
 		// fmt.Printf(
 		// 	"textline: %v\n",
@@ -272,18 +222,6 @@ func prepareSQLStatement(
 		pkColumnValuesRows = append(pkColumnValuesRows, fmt.Sprintf("ROW(%s)", value))
 	}
 	//  └──────────────────────────────────────────────────────────────────────────────┘
-
-	dbSrc := diff.InitializeDBSettings(
-		envVar.DfcSrcHost,
-		envVar.DfcSrcPort,
-		envVar.DfcSrcUsername,
-		envVar.DfcSrcPassword,
-		envVar.DfcSrcDbname,
-	)
-	defer func() {
-		e := dbSrc.Close()
-		errorCheck(e)
-	}()
 
 	mapDiffTable := &map[string]string{
 		"insert": tableSrc + "_diff_insert",
